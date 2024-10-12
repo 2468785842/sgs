@@ -1,3 +1,10 @@
+import os
+
+LDPath = r"D:\leidian\LDPlayerVK"
+
+# 设置 ADBUTILS_ADB_PATH 环境变量, 雷电模拟器路径因为要用模拟器自带的adb
+os.environ['ADBUTILS_ADB_PATH'] = f'{LDPath}'
+
 import threading
 import time
 import coord
@@ -14,9 +21,9 @@ last_gan_time = 0
 status_para = 0     # 状态态参数 0为正常钓鱼 1为进入致命一击界面 2为钓鱼结束
 son_threa_run = True
 
-normal_speed = 0.06
+normal_speed = 0.065
 speed = normal_speed  # 在线程判断速度慢时，需要的点击频率
-old_speed = 0.38  # 需要慢下来的点击速率
+old_speed = 0.3  # 需要慢下来的点击速率
 ti_gan_time = 5.92  # 提杆后，过多少秒就是开钓鱼 这个最好是以加大时间调整,最低时间为5，在往下调,会出bug
 # 上方值都是由,本人电脑配置，最佳参数值，若有不一致，可小幅度调整
 
@@ -39,6 +46,7 @@ i_ray = r'.\sgs_image\07_ray.png'
 # 电
 i_electricity = r'.\sgs_image\08_electricity.png'
 
+
 def screencap():
     img = d.screenshot(format='opencv')
       
@@ -51,10 +59,12 @@ def screencap():
 def get_pixel_color(x, y):
     # 使用 OpenCV 读取截图
     img = screencap()
-    bg_img = img[y, x]
+    
+    # 获取指定位置 (x, y) 处的 BGR 值
+    bgr_color = img[y, x]
     
     # 将 BGR 转换为 RGB 以保持一致性
-    rgb_color = tuple(bg_img[::-1])
+    rgb_color = tuple(bgr_color[::-1])
     return rgb_color
 
 def check_color_range(color, range_value, target):
@@ -206,17 +216,16 @@ def get_image_exist(yuan_path, cut_position, threshold):
     # 增强对比度
     enhanced_image = cv2.equalizeHist(gray_image)
     # 获取窗口位置
-    # region = (
-    #     cut_position['start_x'], 
-    #     cut_position['start_y'],
-    #     cut_position['width'],
-    #     cut_position['height'])  # 替换为实际的截图区域
-
-    # 将 PIL 图像转换为 NumPy 数组
-    get_image_np = screencap()
-    # [region[1]:region[1] + region[3]][region[0]:region[0] + region[2]]
+    region = (
+        cut_position['start_x'], 
+        cut_position['start_y'],
+        cut_position['width'],
+        cut_position['height'])  # 替换为实际的截图区域
+    # 获取需要截图的区域
+    img = screencap()
+    get_image = img[region[1]:region[3] + region[1], region[0]:region[2] + region[0]]
     # 转为灰度图像
-    gray_get_image = cv2.cvtColor(get_image_np, cv2.COLOR_BGR2GRAY)
+    gray_get_image = cv2.cvtColor(get_image, cv2.COLOR_BGR2GRAY)
     # 增强对比度
     enhanced_get_image = cv2.equalizeHist(gray_get_image)
     # 模板匹配
@@ -275,7 +284,7 @@ def go_fish():
         time.sleep(1)
         # Step 7:正式钓鱼
         # 模拟按下鼠标左键
-        d.long_click(coord.start_fish['x'], coord.start_fish['y'],1.7)
+        d.long_click(coord.start_fish['x'], coord.start_fish['y'])
         son_threa_run = True
         print("看看线程执行了几次")
         while True:
@@ -328,9 +337,7 @@ def go_fish():
                         d.click(coord.start_fish['x'], coord.start_fish['y'])
                         with speed_lock:
                             current_speed = speed
-                        print("current speed:", current_speed)
                         time.sleep(current_speed)
-
 
         time.sleep(8)
         son_threa_run = False
@@ -357,3 +364,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
