@@ -14,7 +14,7 @@ last_gan_time = 0
 status_para = 0     # 状态态参数 0为正常钓鱼 1为进入致命一击界面 2为钓鱼结束
 son_threa_run = True
 
-normal_speed = 0.05
+normal_speed = 0.07
 speed = normal_speed  # 在线程判断速度慢时，需要的点击频率
 old_speed = 0.18  # 需要慢下来的点击速率
 ti_gan_time = 5.92  # 提杆后，过多少秒就是开钓鱼 这个最好是以加大时间调整,最低时间为5，在往下调,会出bug
