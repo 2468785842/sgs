@@ -196,7 +196,7 @@ def ScreenControlThread():
     with gameStateRWLock.w_locked():
         gameState = state
         
-    if state != GameState.OVER or not stopFlag.is_set():
+    if state == GameState.OVER and not stopFlag.is_set():
         time.sleep(7)
         print('点击再钓一次')
         d.click(coord.again_fish['x'], coord.again_fish['y'])
