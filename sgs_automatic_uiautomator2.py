@@ -104,7 +104,7 @@ def VigourChecker():
         newSpeed = normalSpeed if checkColorRange(
             coord.norm_color, 10, 
             getPixelColor(coord.get_man_color['x'], coord.get_man_color['y'])
-        ) else .08 / (normalSpeed + .0075) # 反比例函数normal越小,这个越大
+        ) else .06 / (normalSpeed + .006) # 反比例函数normal越小,这个越大
 
         with speedLock:
             speed = newSpeed
@@ -196,12 +196,11 @@ def ScreenControlThread():
     with gameStateRWLock.w_locked():
         gameState = state
         
-    if stopFlag.is_set(): return
-
-    time.sleep(7)
-    print('点击再钓一次')
-    d.click(coord.again_fish['x'], coord.again_fish['y'])
-    controlReady.clear()
+    if state != GameState.OVER or not stopFlag.is_set():
+        time.sleep(7)
+        print('点击再钓一次')
+        d.click(coord.again_fish['x'], coord.again_fish['y'])
+        controlReady.clear()
 
 
 def StateUpdater():
@@ -271,9 +270,8 @@ def StateUpdater():
 
 async def check_for_exit():
     global stopFlag
-    print("按下 'q' 退出程序")
     await asyncio.get_event_loop() \
-        .run_in_executor(None, sys.stdin.read, 1)
+        .run_in_executor(None, input, "按下 'Enter' 退出程序\n")
     stopFlag.set()
 
 
@@ -471,3 +469,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
