@@ -15,6 +15,9 @@ i_ray = r'.\sgs_image\07_ray.png'
 # 电
 i_electricity = r'.\sgs_image\08_electricity.png'
 
+# 钓鱼循环次数
+runCount = 4
+
 import os
 
 # 基本上支持所有有adb的模拟器, 包括真机只要有adb就行
@@ -60,7 +63,7 @@ controlReady = threading.Event()
 laGanTime = 0
 laGanTimeLock = threading.Lock()
 
-normalSpeed = .06
+normalSpeed = .05
 
 speed = normalSpeed
 speedLock = threading.Lock()
@@ -103,9 +106,7 @@ def VigourChecker():
         newSpeed = normalSpeed if checkColorRange(
             coord.norm_color, 10, 
             getPixelColor(coord.get_man_color['x'], coord.get_man_color['y'])
-        ) else .06 / (normalSpeed + .006) # 反比例函数normal越小,这个越大
-
-        print('newSpeed: ', newSpeed)
+        ) else normalSpeed / (normalSpeed + normalSpeed / 10) # 反比例函数normal越小,这个越大
 
         with speedLock:
             speed = newSpeed
@@ -275,8 +276,7 @@ async def check_for_exit():
     stopFlag.set()
 
 
-# 钓鱼循环次数
-runCount = 30
+
 async def initThreads():
     global runCount
     global gameState
@@ -285,7 +285,7 @@ async def initThreads():
 
     with ThreadPoolExecutor(5) as pool:
         # 启动监测退出的任务
-        asyncio.create_task(check_for_exit())
+        checkExit = asyncio.create_task(check_for_exit())
         # 屏幕抓取会一直运行直到退出程序
         loop.run_in_executor(pool, ScreenCatcher)
         while runCount > 0:
@@ -310,6 +310,9 @@ async def initThreads():
                 gameState = None
 
             runCount -= 1
+
+    stopFlag.set()
+    checkExit.cancel()
 
 
 async def initEnumlator():
