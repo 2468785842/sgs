@@ -16,12 +16,14 @@ i_ray = r'.\sgs_image\07_ray.png'
 i_electricity = r'.\sgs_image\08_electricity.png'
 
 import os
-import sys
 
-LDPath = r"D:\leidian\LDPlayerVK"
+# 基本上支持所有有adb的模拟器, 包括真机只要有adb就行
+# 前提是分辨率为 1600x900
+# EmulatorPath = r"D:\leidian\LDPlayerVK"
+EmulatorPath = r"D:\Program Files\Netease\MuMu Player 12\shell"
 
 # 设置 ADBUTILS_ADB_PATH 环境变量, 雷电模拟器路径因为要用模拟器自带的adb
-os.environ['ADBUTILS_ADB_PATH'] = LDPath
+os.environ['ADBUTILS_ADB_PATH'] = EmulatorPath
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import asyncio
@@ -36,8 +38,6 @@ from enum import Enum
 
 from PIL.Image import Image
 
-import rwlock
-
 class GameState(Enum):
     RUNNING = 1
     SKILL = 2
@@ -51,13 +51,14 @@ curScreen = None
 d: Optional[u2.Device] = None
 
 scrst: Image = None
+# scrstRWLock = rwlock.RWLockWrite()
 scrstLock = threading.Lock()
 scrstCatcherReady = threading.Event()
 
 controlReady = threading.Event()
 
 laGanTime = 0
-laGanTimeRWLock = rwlock.RWLock()
+laGanTimeLock = threading.Lock()
 
 normalSpeed = .06
 
@@ -65,7 +66,7 @@ speed = normalSpeed
 speedLock = threading.Lock()
 
 gameState: GameState = None
-gameStateRWLock = rwlock.RWLock()
+gameStateLock = threading.Lock()
 
 
 # update screenshot
@@ -76,17 +77,16 @@ def ScreenCatcher():
         try:
             with scrstLock:
                 scrst = d.screenshot()
-                assert scrst is not None
         except Exception as e:
             print("Screenshot Failed, Retry: ", e)
             continue
 
+        # 并不需要更新太频繁
+        time.sleep(.04)
+
         if not scrstCatcherReady.is_set():
             print('ScreenCatcher Ready!')
             scrstCatcherReady.set()
-
-        # 并不需要更新太频繁
-        time.sleep(.04)
 
     print('ScreenCatcher Stop')
 
@@ -94,10 +94,9 @@ def ScreenCatcher():
 def VigourChecker():
     global speed
 
-    scrstCatcherReady.wait()
     controlReady.wait()
 
-    with gameStateRWLock.r_locked():
+    with gameStateLock:
         state = gameState
 
     while state != GameState.OVER and not stopFlag.is_set():
@@ -106,10 +105,12 @@ def VigourChecker():
             getPixelColor(coord.get_man_color['x'], coord.get_man_color['y'])
         ) else .06 / (normalSpeed + .006) # 反比例函数normal越小,这个越大
 
+        print('newSpeed: ', newSpeed)
+
         with speedLock:
             speed = newSpeed
 
-        with gameStateRWLock.r_locked():
+        with gameStateLock:
             state = gameState
 
         time.sleep(0.5)
@@ -143,7 +144,7 @@ def ScreenControlThread():
     print('Running')
 
     state = GameState.RUNNING
-    with gameStateRWLock.w_locked():
+    with gameStateLock:
         gameState = state
 
     controlReady.set()
@@ -173,7 +174,7 @@ def ScreenControlThread():
                 time.sleep(speed)
         elif state == GameState.LAGAN:
             current_gan = True
-            with laGanTimeRWLock.r_locked():
+            with laGanTimeLock:
                 if time.time() - laGanTime < 5:
                     current_gan = False
             if current_gan:
@@ -184,20 +185,20 @@ def ScreenControlThread():
                     coord.start_fish['y'] - 100, 
                     duration=.2
                 )
-                with laGanTimeRWLock.w_locked():
+                with laGanTimeLock:
                     laGanTime = time.time()
                 print("看连续拉了几次杆")
                 time.sleep(0.6)
 
-        with gameStateRWLock.r_locked():
+        with gameStateLock:
             state = gameState
 
     ## Update State
-    with gameStateRWLock.w_locked():
+    with gameStateLock:
         gameState = state
         
+    time.sleep(5)
     if state == GameState.OVER and not stopFlag.is_set():
-        time.sleep(7)
         print('点击再钓一次')
         d.click(coord.again_fish['x'], coord.again_fish['y'])
         controlReady.clear()
@@ -205,8 +206,6 @@ def ScreenControlThread():
 
 def StateUpdater():
     global gameState
-
-    scrstCatcherReady.wait()
 
     controlReady.wait()
 
@@ -216,9 +215,9 @@ def StateUpdater():
     # 风图标
     color2 = coord.test_wind_color
     range_value = 20
-    with gameStateRWLock.r_locked():
+    with gameStateLock:
         state = gameState
-
+    
     while state != GameState.OVER and not stopFlag.is_set():
  
         target = getPixelColor(
@@ -226,7 +225,7 @@ def StateUpdater():
         new_gan = not checkColorRange(color, range_value, target)
 
         # 拉杆持续时间大概要5s,我们在5s之后再操作
-        with laGanTimeRWLock.r_locked():
+        with laGanTimeLock:
             if laGanTime != 0 and state != GameState.LAGAN and new_gan:
                 if time.time() - laGanTime < 5:
                     state = GameState.LAGAN
@@ -256,16 +255,17 @@ def StateUpdater():
             else:
                 state = GameState.OVER
 
-        with gameStateRWLock.r_locked():
+        with gameStateLock:
+            if state != gameState: 
+                print('Game State: ', state)
             if gameState == GameState.OVER:
                 break
 
-        with gameStateRWLock.w_locked():
-            if state != gameState: 
-                print('Game State: ', state)
+        with gameStateLock:
             gameState = state
 
         time.sleep(1)
+    print('State Updater Stop')
 
 
 async def check_for_exit():
@@ -302,10 +302,11 @@ async def initThreads():
                     # 模拟器好像有内存泄漏?(内存占用飙升)
                     # 也有可能是 uiautomator 的问题??
                     d.stop_uiautomator()
+
                     print("正在结束进程(请等待几秒钟)!!!")
                     exit()
 
-            with gameStateRWLock.w_locked():
+            with gameStateLock:
                 gameState = None
 
             runCount -= 1
@@ -326,14 +327,19 @@ async def initEnumlator():
 
     print('Connect Success! Enumlator info: \n', d.info)
     
+    if d.info['displayHeight'] != 900 and d.info['displayHeight']:
+        print('必须将分辨率调整为 1600x900')
+        exit()
+
     # check current app info
     app_cur = d.app_current()['package']
-
-    if app_cur is None and app_cur.find('.sgs.') == -1:
+    print(app_cur)
+    if app_cur is None or app_cur.find('.sgs.') == -1:
         print('你需要启动三国杀!')
         exit()
     else:
         print('已经打开三国杀移动版')
+    
     print('注意必须先!!! 打开活动界面, 点击开始钓鱼, 进入抛竿页面')
        
 
