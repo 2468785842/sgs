@@ -1,4 +1,4 @@
-### 修改自 [](https://github.com/siriusnouers/sgs)
+### 修改自 [https://github.com/siriusnouers/sgs](https://github.com/siriusnouers/sgs)
 
 ## 为什么?
 1. 将原来的pyautogui库实现自动化变为uiautomator2实现自动化
@@ -25,4 +25,4 @@
  ## 问题?
  1. 可能遇到`Ctrl+c`或输入`Enter`无法退出的情况, 需要直接关闭终端命令行
  2. 终结一击好像识别不了有点问题?(不是传奇鱼基本可以成功...不影响), PS: 因为传奇鱼少我没注意
- 3. 无
+ 3. 还是需要手动修改鱼饵
