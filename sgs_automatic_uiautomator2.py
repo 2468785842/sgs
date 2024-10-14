@@ -329,7 +329,7 @@ async def initEnumlator():
 
     print('Connect Success! Enumlator info: \n', d.info)
     
-    if d.info['displayHeight'] != 900 and d.info['displayHeight']:
+    if d.info['displayHeight'] != 900 and d.info['displayHeight'] == 1600:
         print('必须将分辨率调整为 1600x900')
         exit()
 
