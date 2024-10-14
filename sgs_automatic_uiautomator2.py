@@ -15,13 +15,12 @@ i_ray = r'.\sgs_image\07_ray.png'
 # 电
 i_electricity = r'.\sgs_image\08_electricity.png'
 
-# 钓鱼循环次数
-runCount = 4
-
 import os
 
 # 基本上支持所有有adb的模拟器, 包括真机只要有adb就行
 # 前提是分辨率为 1600x900
+# 先启动 adb 连接虚拟机
+# D:\Program Files\Netease\MuMu Player 12\shell\adb.exe connect localhost:16384
 # EmulatorPath = r"D:\leidian\LDPlayerVK"
 EmulatorPath = r"D:\Program Files\Netease\MuMu Player 12\shell"
 
@@ -35,6 +34,7 @@ import coord
 import cv2
 import numpy as np
 import uiautomator2 as u2
+from readerwriterlock import rwlock
 
 from typing import Optional
 from enum import Enum
@@ -54,8 +54,8 @@ curScreen = None
 d: Optional[u2.Device] = None
 
 scrst: Image = None
-# scrstRWLock = rwlock.RWLockWrite()
-scrstLock = threading.Lock()
+scrstRWLock = rwlock.RWLockRead()
+# scrstLock = threading.Lock()
 scrstCatcherReady = threading.Event()
 
 controlReady = threading.Event()
@@ -78,7 +78,7 @@ def ScreenCatcher():
 
     while not stopFlag.is_set():
         try:
-            with scrstLock:
+            with scrstRWLock.gen_wlock():
                 scrst = d.screenshot()
         except Exception as e:
             print("Screenshot Failed, Retry: ", e)
@@ -193,6 +193,7 @@ def ScreenControlThread():
 
         with gameStateLock:
             state = gameState
+        time.sleep(.01)
 
     ## Update State
     with gameStateLock:
@@ -262,30 +263,27 @@ def StateUpdater():
             if gameState == GameState.OVER:
                 break
 
-        with gameStateLock:
             gameState = state
 
         time.sleep(1)
     print('State Updater Stop')
 
 
-async def check_for_exit():
-    global stopFlag
+async def checkForExit():
     await asyncio.get_event_loop() \
         .run_in_executor(None, input, "按下 'Enter' 退出程序\n")
     stopFlag.set()
 
 
-
 async def initThreads():
-    global runCount
     global gameState
     print('start init threads')
     loop = asyncio.get_event_loop()
 
+    runCount = int(input("输入循环次数: "))
     with ThreadPoolExecutor(5) as pool:
         # 启动监测退出的任务
-        checkExit = asyncio.create_task(check_for_exit())
+        checkExitTask = asyncio.create_task(checkForExit())
         # 屏幕抓取会一直运行直到退出程序
         loop.run_in_executor(pool, ScreenCatcher)
         while runCount > 0:
@@ -311,8 +309,9 @@ async def initThreads():
 
             runCount -= 1
 
-    stopFlag.set()
-    checkExit.cancel()
+        checkExitTask.cancel()
+        stopFlag.set()
+        print('结束.')
 
 
 async def initEnumlator():
@@ -361,16 +360,28 @@ def checkColorRange(color, range_value, target):
     return all(abs(c - t) <= range_value for c, t in zip(color, target))
 
 
-def getPixelColor(x, y, retryCount = 5):
-    if retryCount == 0:
-        raise OSError('loading image failed')
+def getPixelColor(x, y):
+    retryCount = 5
 
-    try:
-        with scrstLock:
-            img = scrst.convert('RGB')
-    except OSError as e:
-        print(f"Error loading image retry: {e}")
-        img = getPixelColor(x, y, retryCount - 1)
+    with scrstRWLock.gen_rlock():
+        while retryCount > 0:
+            try:
+                img = scrst.convert('RGB')
+            except OSError as e:
+                print(f"Error loading image retry: {e}")
+                retryCount -= 0
+                continue
+            break
+
+    if retryCount == 0:
+        print(f"Error loading image Unkown Error: {e}")
+        exit()
+    
+    # 读写锁, 读优先, 读饥饿, 这里加点延迟, 让出cpu
+
+    time.sleep(0.001)
+    # 或者加个打印语句也是可以的, 玄学代码(不是)  :)
+    # print('OK')
 
     return img.getpixel((x, y))
 
@@ -392,8 +403,12 @@ def getImageExist(yuan_path, cut_position, threshold):
         cut_position['height'] + cut_position['start_y'])  # 替换为实际的截图区域
     npArr = None
     # 获取需要截图的区域
-    with scrstLock:
+    with scrstRWLock.gen_rlock():
         npArr = np.array(scrst.crop(region))
+
+    # 让出cpu
+    time.sleep(0.001)
+
     # 转为灰度图像
     gray_get_image = cv2.cvtColor(npArr, cv2.COLOR_BGR2GRAY)
     # 增强对比度
@@ -478,4 +493,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
