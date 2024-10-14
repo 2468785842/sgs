@@ -20,6 +20,7 @@
 4. 需要使用模拟器的`adb`功能
 5. 安装py库`pip install uiautomator2 readerwriterlock opencv`
 6. 修改代码中的`EmulatorPath = r"D:\Program Files\Netease\MuMu Player 12\shell"`为你自己的模拟器安装路径(下方必须有adb.exe必须支持adb)
+7. 必须确保adb连接了模拟器哈, 如果启动失败就是没开adb找自己模拟器的官方教程怎么开adb
 8. 运行`python ./sgs_automatic_uiautomator2.py`之后输入循环次数即可
 
  ## 问题?
